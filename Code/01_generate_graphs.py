@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import os
 import datetime
 import pickle
+from sklearn.linear_model import LinearRegression
 
 # Set directories
 code_dir = str(os.getcwd()) + "\\"
@@ -39,6 +40,16 @@ EDA['drop'] = range(0,len(EDA))
 EDA['time_unix'] = EDA['drop']*(1/EDA.EDA[1])+EDA.EDA[0]
 EDA = EDA.drop([0,1])
 EDA = EDA.drop(['drop'],axis=1)
+## delta_EDA (stored in EDA dataframe): Let's look at first differences in EDA to ignore the drift.
+delta_EDA = EDA.diff()
+EDA['delta_EDA'] = delta_EDA.EDA
+## res_EDA (stored in EDA dataframe): Alternatively, we can also look at residualized EDA from a regression of time on EDA.
+X = EDA.time_unix[np.logical_not(np.isnan(EDA.EDA))]
+X = X[:, None]
+Y = EDA.EDA[np.logical_not(np.isnan(EDA.EDA))]
+Y = Y[:, None]
+reg = LinearRegression().fit(X, Y)
+EDA['res_EDA'] = EDA.EDA - np.matrix(reg.predict(X)).T.A[0]
 ## HR: Average heart rate extracted from the BVP signal.
 HR = pd.read_csv(data_dir + 'HR.csv', names=['HR'])
 HR['drop'] = range(0,len(HR))
@@ -66,6 +77,12 @@ data = data.merge(IBI, how='outer', on='time_unix', sort=True)
 # Drop all data before and after the experiment.
 data = data[(data['time_unix'] > tag0) & (data['time_unix'] < tag1)]
 
+# Generate a time variable in milliseconds since the start of the experiment (tag0)
+time0 = min(data['time_unix'])
+data['time_s'] = (data['time_unix'] - time0)
+data['time_ms'] = data.time_s*1000
+data['time_m'] = data.time_s/60
+
 # Store this data
 data.to_pickle(data_dir + "01_merged_data.pkl")
 
@@ -73,22 +90,27 @@ data.to_pickle(data_dir + "01_merged_data.pkl")
 plt.style.use('seaborn-whitegrid')
 ## ACC
 plt.subplot(4,1,1)
-plt.plot(data.time_unix[np.logical_not(np.isnan(data.ACC_delta))], data.ACC_delta[np.logical_not(np.isnan(data.ACC_delta))])
-plt.title('Total change in acceleration (1/64g)')
+plt.plot(data.time_m[np.logical_not(np.isnan(data.ACC_delta))], data.ACC_delta[np.logical_not(np.isnan(data.ACC_delta))])
+plt.title('Total change in acceleration')
+plt.ylabel(r'$\frac{1}{64}$g')
 ## BVD
 plt.subplot(4,1,2)
-plt.plot(data.time_unix[np.logical_not(np.isnan(data.BVP))], data.BVP[np.logical_not(np.isnan(data.BVP))])
+plt.plot(data.time_m[np.logical_not(np.isnan(data.BVP))], data.BVP[np.logical_not(np.isnan(data.BVP))])
 plt.title('Blood volume changes in tissue')
-## EDA
+plt.ylabel('nW')
+## delta_EDA (Looking at this instead of EDA to ignore the positive drift over time, potentially caused by static buildup.)
 plt.subplot(4,1,3)
-plt.plot(data.time_unix[np.logical_not(np.isnan(data.EDA))], data.EDA[np.logical_not(np.isnan(data.EDA))])
-plt.title('Electrodermal activity (microsiemens)')
+plt.plot(data.time_m[np.logical_not(np.isnan(data.res_EDA))], data.res_EDA[np.logical_not(np.isnan(data.res_EDA))])
+plt.title('Residualized electrodermal activity')
+plt.ylabel(u'\u03bcS')
 ## HR
 plt.subplot(4,1,4)
-plt.plot(data.time_unix[np.logical_not(np.isnan(data.HR))], data.HR[np.logical_not(np.isnan(data.HR))])
+plt.plot(data.time_m[np.logical_not(np.isnan(data.HR))], data.HR[np.logical_not(np.isnan(data.HR))])
 plt.title('Heart rate')
+plt.xlabel('Time')
+plt.ylabel('BPM')
 
 # Show the plot and save it.
 plt.tight_layout()
-plt.savefig(fig_dir + 'graph.png')
+plt.savefig(fig_dir + 'Brenden_graph.png')
 plt.show()
