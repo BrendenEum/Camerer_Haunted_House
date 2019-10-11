@@ -112,5 +112,6 @@ plt.ylabel('BPM')
 
 # Show the plot and save it.
 plt.tight_layout()
+plt.savefig(fig_dir + 'Brenden_graph.pdf')
 plt.savefig(fig_dir + 'Brenden_graph.png')
 plt.show()
